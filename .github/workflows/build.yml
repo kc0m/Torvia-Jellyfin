@@ -1,3 +1,4 @@
+# Personal fork: 4K-first release ordering, largest-file-first, remembered sort, auto version.
 name: Build and publish plugin
 
 on:
