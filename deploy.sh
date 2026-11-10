@@ -20,8 +20,20 @@ fi
 git push origin main
 
 gh workflow run build.yml --repo "$REPO" --ref main
-sleep 8
-RUN=$(gh api "repos/$REPO/actions/runs?per_page=1" --jq '.workflow_runs[0].databaseId')
+
+# The dispatch takes a few seconds to appear; poll for the run that matches this commit.
+HEAD_SHA=$(git rev-parse HEAD)
+RUN=""
+for _ in $(seq 1 20); do
+  sleep 5
+  RUN=$(gh api "repos/$REPO/actions/runs?per_page=5" \
+        --jq ".workflow_runs[] | select(.head_sha==\"$HEAD_SHA\") | .databaseId" | head -1)
+  [ -n "$RUN" ] && break
+done
+if [ -z "$RUN" ]; then
+  echo "no run appeared for $HEAD_SHA - check the Actions tab" >&2
+  exit 1
+fi
 echo "watching run $RUN ..."
 gh run watch "$RUN" --repo "$REPO" --exit-status >/dev/null
 echo "build finished:"
