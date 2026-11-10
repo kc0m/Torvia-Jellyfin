@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Push, then explicitly trigger the plugin build.
+# Push and wait for the resulting plugin build.
 #
-# WHY NOT JUST PUSH: on a fork of a public repo GitHub holds push-triggered workflows
-# disabled until the owner clicks "Enable workflows" in the Actions tab. `workflow_dispatch`
-# is not affected, so we dispatch after pushing. One command -> one new installable build.
+# Push-triggered workflows work on this fork, so pushing is enough. The dispatch is kept only as a
+# fallback: forks of public repos start with push triggers disabled until workflows are enabled
+# once (PUT /actions/permissions with enabled=true clears it). If that ever regresses, this script
+# still produces a build instead of silently doing nothing.
 #
-#   ./deploy.sh "commit message"     # commits everything, pushes, builds, waits, prints version
-#   ./deploy.sh                      # pushes what is already committed, then builds
+#   ./deploy.sh "commit message"     # commit everything, push, wait for the build
+#   ./deploy.sh                      # push what is already committed, wait for the build
 set -euo pipefail
 export PATH="$HOME/bin:$PATH"
 REPO="kc0m/Torvia-Jellyfin"
@@ -18,22 +19,30 @@ if [ "${1:-}" != "" ]; then
 fi
 
 git push origin main
-
-gh workflow run build.yml --repo "$REPO" --ref main
-
-# The dispatch takes a few seconds to appear; poll for the run that matches this commit.
 HEAD_SHA=$(git rev-parse HEAD)
+
+find_run() {
+  gh api "repos/$REPO/actions/runs?per_page=8" \
+    --jq ".workflow_runs[] | select(.head_sha==\"$HEAD_SHA\") | .databaseId" | head -1
+}
+
 RUN=""
-for _ in $(seq 1 20); do
+for _ in $(seq 1 6); do
   sleep 5
-  RUN=$(gh api "repos/$REPO/actions/runs?per_page=5" \
-        --jq ".workflow_runs[] | select(.head_sha==\"$HEAD_SHA\") | .databaseId" | head -1)
+  RUN=$(find_run)
   [ -n "$RUN" ] && break
 done
+
 if [ -z "$RUN" ]; then
-  echo "no run appeared for $HEAD_SHA - check the Actions tab" >&2
-  exit 1
+  echo "no push-triggered run after 30s - dispatching manually" >&2
+  gh workflow run build.yml --repo "$REPO" --ref main
+  for _ in $(seq 1 12); do
+    sleep 5
+    RUN=$(find_run)
+    [ -n "$RUN" ] && break
+  done
 fi
+[ -n "$RUN" ] || { echo "build never appeared - check the Actions tab" >&2; exit 1; }
 echo "watching run $RUN ..."
 gh run watch "$RUN" --repo "$REPO" --exit-status >/dev/null
 echo "build finished:"
