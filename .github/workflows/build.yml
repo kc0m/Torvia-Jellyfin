@@ -22,33 +22,30 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Read version
+      # The version is DERIVED, not typed: major.minor come from build.yaml and the third part is
+      # the workflow run number, so every build is unique and strictly increasing. Jellyfin refuses
+      # to install a version it has already seen, so this replaces the old "bump the version by
+      # hand or nothing publishes" step -- push, and a new installable build appears.
+      - name: Compute version
         id: v
         run: |
-          echo "version=$(grep '^version:' build.yaml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+          BASE=$(grep '^version:' build.yaml | cut -d'"' -f2)
+          MAJOR=$(echo "$BASE" | cut -d. -f1)
+          MINOR=$(echo "$BASE" | cut -d. -f2)
+          VER="${MAJOR}.${MINOR}.${{ github.run_number }}.0"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Built version $VER (base $BASE, run ${{ github.run_number }})"
           echo "abi=$(grep '^targetAbi:' build.yaml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
           echo "guid=$(grep '^guid:' build.yaml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
 
-      # A published version is never rebuilt: Jellyfin keeps its checksum, and a new file with the
-      # same version number would fail to install. Code changes need a new version in build.yaml.
-      - name: Skip if this version is already published
-        id: exists
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
-            echo "Version ${{ steps.v.outputs.version }} is already published - bump the version in build.yaml to release changes."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build
-        if: steps.exists.outputs.skip != 'true'
-        run: dotnet build PhoenicxTorBox.csproj -c Release -o out
+        run: |
+          dotnet build PhoenicxTorBox.csproj -c Release -o out \
+            -p:Version=${{ steps.v.outputs.version }} \
+            -p:AssemblyVersion=${{ steps.v.outputs.version }} \
+            -p:FileVersion=${{ steps.v.outputs.version }}
 
       - name: Package
-        if: steps.exists.outputs.skip != 'true'
         id: pkg
         run: |
           VER=${{ steps.v.outputs.version }}
@@ -59,7 +56,6 @@ jobs:
           echo "md5=$(md5sum "$ZIP" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Create release
-        if: steps.exists.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -69,7 +65,6 @@ jobs:
             --notes "Install from the plugin repository: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/manifest.json (or raw gh-pages manifest.json)."
 
       - name: Publish manifest.json to gh-pages
-        if: steps.exists.outputs.skip != 'true'
         run: |
           VER=${{ steps.v.outputs.version }}
           REPO=${{ github.repository }}

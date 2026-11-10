@@ -221,13 +221,14 @@ public static class ReleaseParser
     }
 
     /// <summary>
-    /// "Best" order: CAM/TS last, 10-bit first, then 1080p → 4K → 720p → 480p, then smallest file, then most seeders.
+    /// "Best" order: CAM/TS last, 10-bit first, then 4K → 1080p → 720p → 480p, then largest file
+    /// (at the same resolution a bigger file means a higher bitrate), then most seeders.
     /// </summary>
     public static List<ReleaseInfo> SortBest(IEnumerable<ReleaseInfo> list) =>
         list.OrderBy(r => r.IsCam ? 1 : 0)
             .ThenBy(r => r.BitDepth == 10 ? 0 : 1)
-            .ThenBy(r => r.Quality switch { "1080p" => 0, "4K" => 1, "720p" => 2, "480p" => 3, _ => 4 })
-            .ThenBy(r => r.SizeBytes <= 0 ? long.MaxValue : r.SizeBytes)
+            .ThenBy(r => r.Quality switch { "4K" => 0, "1080p" => 1, "720p" => 2, "480p" => 3, _ => 4 })
+            .ThenByDescending(r => r.SizeBytes <= 0 ? 0 : r.SizeBytes)
             .ThenByDescending(r => r.Seeders)
             .ToList();
 

@@ -410,10 +410,14 @@
     call('GET', path).then(function (j) {
       var all = j.releases || [];
       if (!all.length) { box.innerHTML = '<div class="msg">No cached releases right now' + (j.wholeSeason ? ' for a whole-season pack. Try a single episode.' : '. Try again later.') + '</div>'; return; }
+      var has4k = all.some(function (r) { return r.quality === '4K'; });
       var has1080 = all.some(function (r) { return r.quality === '1080p'; });
+      var defQ = has4k ? '4K' : (has1080 ? '1080p' : 'all');
+      var savedSort = (function () { try { return localStorage.getItem('ts_sort'); } catch (e) { return null; } })();
       view = { all: all, x: x, wholeSeason: j.wholeSeason, avail: j.available || {},
-        f: { quality: has1080 ? '1080p' : 'all', tenBit: false, hdr: false, langs: [], hideCam: false, sort: 'best', kind: 'all' },
-        note: has1080 ? '' : 'No 1080p releases, so all qualities are shown.' };
+        f: { quality: defQ, tenBit: false, hdr: false, langs: [], hideCam: false, sort: savedSort || 'largest', kind: 'all' },
+        note: defQ === 'all' ? 'No 4K or 1080p releases, so all qualities are shown.'
+          : (defQ === '4K' ? '' : 'No 4K releases, so 1080p is shown.') };
       var tags = status.tags || [];
       var def = x.type === 'tv' ? status.tvTag : status.movieTag;
       box.innerHTML = '<div class="filters" id="filters"></div>' +
@@ -472,8 +476,9 @@
         else if (g === 'kind') f.kind = v;
         else if (g === 'sort') f.sort = v;
         else if (g === 'lang') { var i = f.langs.indexOf(v); if (i >= 0) f.langs.splice(i, 1); else f.langs.push(v); }
-        else if (g === 'reset') { f.quality = 'all'; f.tenBit = f.hdr = f.hideCam = false; f.langs = []; f.sort = 'best'; f.kind = 'all'; }
+        else if (g === 'reset') { f.quality = 'all'; f.tenBit = f.hdr = f.hideCam = false; f.langs = []; f.sort = 'largest'; f.kind = 'all'; }
         else f[g] = !f[g];
+        if (g === 'sort' || g === 'reset') { try { localStorage.setItem('ts_sort', f.sort); } catch (e) {} }
         view.note = '';
         drawFilters();
         drawList();
