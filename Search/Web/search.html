@@ -414,8 +414,9 @@
       var has1080 = all.some(function (r) { return r.quality === '1080p'; });
       var defQ = has4k ? '4K' : (has1080 ? '1080p' : 'all');
       var savedSort = (function () { try { return localStorage.getItem('ts_sort'); } catch (e) { return null; } })();
+      var savedCyr = (function () { try { var v = localStorage.getItem('ts_hidecyr'); return v === null ? true : v === '1'; } catch (e) { return true; } })();
       view = { all: all, x: x, wholeSeason: j.wholeSeason, avail: j.available || {},
-        f: { quality: defQ, tenBit: false, hdr: false, langs: [], hideCam: false, sort: savedSort || 'largest', kind: 'all' },
+        f: { quality: defQ, tenBit: false, hdr: false, langs: [], hideCam: false, hideCyr: savedCyr, sort: savedSort || 'largest', kind: 'all' },
         note: defQ === 'all' ? 'No 4K or 1080p releases, so all qualities are shown.'
           : (defQ === '4K' ? '' : 'No 4K releases, so 1080p is shown.') };
       var tags = status.tags || [];
@@ -452,9 +453,11 @@
         btn('kind', 'pack', 'Packs', f.kind === 'pack', packs) + '</div>';
     }
     var nTen = count(function (r) { return r.bitDepth === 10; }), nHdr = count(function (r) { return r.hdr !== 'SDR'; });
+    var nCyr = count(function (r) { return /[\u0400-\u04FF]/.test(r.name || ''); });
     var video = (nTen ? btn('tenBit', '1', '10-bit', f.tenBit, nTen) : '') +
       (nHdr ? btn('hdr', '1', 'HDR / DV', f.hdr, nHdr) : '') +
-      (a.some(function (r) { return r.isCam; }) ? btn('hideCam', '1', 'Hide CAM/TS', f.hideCam, null) : '');
+      (a.some(function (r) { return r.isCam; }) ? btn('hideCam', '1', 'Hide CAM/TS', f.hideCam, null) : '') +
+      (nCyr ? btn('hideCyr', '1', 'Hide Cyrillic', f.hideCyr, nCyr) : '');
     if (video) html += '<div class="fgroup"><span class="flabel">Video</span>' + video + '</div>';
     if (langList.length) {
       html += '<div class="fgroup"><span class="flabel">Language</span>' + langList.map(function (l) {
@@ -476,9 +479,10 @@
         else if (g === 'kind') f.kind = v;
         else if (g === 'sort') f.sort = v;
         else if (g === 'lang') { var i = f.langs.indexOf(v); if (i >= 0) f.langs.splice(i, 1); else f.langs.push(v); }
-        else if (g === 'reset') { f.quality = 'all'; f.tenBit = f.hdr = f.hideCam = false; f.langs = []; f.sort = 'largest'; f.kind = 'all'; }
+        else if (g === 'reset') { f.quality = 'all'; f.tenBit = f.hdr = f.hideCam = false; f.hideCyr = true; f.langs = []; f.sort = 'largest'; f.kind = 'all'; }
         else f[g] = !f[g];
         if (g === 'sort' || g === 'reset') { try { localStorage.setItem('ts_sort', f.sort); } catch (e) {} }
+        if (g === 'hideCyr' || g === 'reset') { try { localStorage.setItem('ts_hidecyr', f.hideCyr ? '1' : '0'); } catch (e) {} }
         view.note = '';
         drawFilters();
         drawList();
@@ -493,6 +497,7 @@
       if (f.tenBit && r.bitDepth !== 10) return false;
       if (f.hdr && r.hdr === 'SDR') return false;
       if (f.hideCam && r.isCam) return false;
+      if (f.hideCyr && /[\u0400-\u04FF]/.test(r.name || '')) return false;
       if (f.kind === 'episode' && r.isSeasonPack) return false;
       if (f.kind === 'pack' && !r.isSeasonPack) return false;
       if (f.langs.length && !(r.languages || []).some(function (l) { return f.langs.indexOf(l) >= 0; })) return false;
