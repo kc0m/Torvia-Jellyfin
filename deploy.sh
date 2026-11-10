@@ -27,14 +27,14 @@ find_run() {
 }
 
 RUN=""
-for _ in $(seq 1 6); do
+for _ in $(seq 1 18); do
   sleep 5
   RUN=$(find_run)
   [ -n "$RUN" ] && break
 done
 
 if [ -z "$RUN" ]; then
-  echo "no push-triggered run after 30s - dispatching manually" >&2
+  echo "no push-triggered run after 90s - dispatching manually" >&2
   gh workflow run build.yml --repo "$REPO" --ref main
   for _ in $(seq 1 12); do
     sleep 5
